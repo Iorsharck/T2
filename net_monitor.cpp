@@ -4,89 +4,51 @@
 #include <fstream>
 #include <thread>
 #include <chrono>
-#include <cstring>
-
 #include <ifaddrs.h>
 #include <arpa/inet.h>
-#include <net/if.h>
 #include <unistd.h>
+#include <netdb.h>
 
 using json = nlohmann::json;
 
-NetMonitor::NetMonitor(const std::string& iface, JSONLogger& log)
+NetMonitor::NetMonitor(const std::string& i,JSONLogger& log)
+:iface(i),logger(log)
 {
-    interfaceName = iface;
-    logger = log;
-    ipChangeCount = 0;
-}
-
-bool NetMonitor::interfaceExists()
-{
-    std::string path = "/sys/class/net/" + interfaceName;
-
-    if(access(path.c_str(), F_OK) != 0)
-    {
-        std::cerr << "Error: Interface does not exist -> "
-                  << interfaceName << std::endl;
-        return false;
-    }
-
-    return true;
+    ipChangeCount=0;
 }
 
 std::string NetMonitor::getMAC()
 {
-    std::string path =
-        "/sys/class/net/" + interfaceName + "/address";
-
-    std::ifstream file(path);
-
-    if(!file.is_open())
-    {
-        std::cerr << "Error reading MAC address" << std::endl;
-        return "";
-    }
+    std::ifstream file("/sys/class/net/"+iface+"/address");
 
     std::string mac;
-    file >> mac;
+    file>>mac;
 
     return mac;
 }
 
 std::string NetMonitor::getIP()
 {
-    struct ifaddrs *ifaddr, *ifa;
+    struct ifaddrs *ifaddr,*ifa;
 
-    if(getifaddrs(&ifaddr) == -1)
-    {
-        std::cerr << "getifaddrs failed" << std::endl;
-        return "";
-    }
+    getifaddrs(&ifaddr);
 
     std::string ip;
 
-    for(ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
+    for(ifa=ifaddr;ifa!=NULL;ifa=ifa->ifa_next)
     {
-        if(ifa->ifa_addr == nullptr)
-            continue;
+        if(!ifa->ifa_addr) continue;
 
-        if(ifa->ifa_addr->sa_family == AF_INET)
+        if(ifa->ifa_addr->sa_family==AF_INET && iface==ifa->ifa_name)
         {
-            if(interfaceName == ifa->ifa_name)
-            {
-                char host[NI_MAXHOST];
+            char host[NI_MAXHOST];
 
-                struct sockaddr_in *sa =
-                    (struct sockaddr_in *)ifa->ifa_addr;
+            inet_ntop(AF_INET,
+                      &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr,
+                      host,
+                      NI_MAXHOST);
 
-                if(inet_ntop(AF_INET,
-                             &sa->sin_addr,
-                             host,
-                             NI_MAXHOST))
-                {
-                    ip = host;
-                }
-            }
+            ip=host;
         }
     }
 
@@ -95,76 +57,57 @@ std::string NetMonitor::getIP()
     return ip;
 }
 
-void NetMonitor::monitor(unsigned int interval_ms)
+void NetMonitor::monitor(int interval)
 {
-    if(!interfaceExists())
-        return;
-
-    currentMAC = getMAC();
-    currentIP = getIP();
-
-    std::cout << "Monitoring interface: "
-              << interfaceName << std::endl;
+    currentIP=getIP();
+    currentMAC=getMAC();
 
     while(true)
     {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(interval_ms));
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
 
-        std::string newMAC = getMAC();
-        std::string newIP = getIP();
+        std::string newIP=getIP();
+        std::string newMAC=getMAC();
 
-        if(newMAC.empty())
-            continue;
-
-        if(newMAC != currentMAC)
+        if(newMAC!=currentMAC)
         {
-            std::cout << "[ALERT] MAC changed\n";
-
-            json log = {
+            json alert={
                 {"type","alert"},
                 {"event","mac_changed"},
-                {"interface",interfaceName},
                 {"old_mac",currentMAC},
                 {"new_mac",newMAC}
             };
 
-            logger.logJSON(log.dump());
+            logger.logJSON(alert.dump());
 
-            currentMAC = newMAC;
+            currentMAC=newMAC;
         }
 
-        if(newIP != currentIP)
+        if(newIP!=currentIP)
         {
-            std::cout << "[INFO] IP changed\n";
-
             ipChangeCount++;
 
-            json log = {
+            json log={
                 {"type","event"},
                 {"event","ip_changed"},
-                {"interface",interfaceName},
                 {"old_ip",currentIP},
-                {"new_ip",newIP},
-                {"change_count",ipChangeCount}
+                {"new_ip",newIP}
             };
 
             logger.logJSON(log.dump());
 
-            currentIP = newIP;
+            currentIP=newIP;
 
-            if(ipChangeCount > 10)
+            if(ipChangeCount>10)
             {
-                json alert = {
+                json alert={
                     {"type","alert"},
-                    {"event","excessive_ip_changes"},
-                    {"interface",interfaceName},
-                    {"changes",ipChangeCount}
+                    {"event","excessive_ip_changes"}
                 };
 
                 logger.logJSON(alert.dump());
 
-                ipChangeCount = 0;
+                ipChangeCount=0;
             }
         }
     }
