@@ -13,7 +13,6 @@ private:
 
 public:
     JSONLogger(const std::string& file);
-
     void logJSON(const std::string& input_JSON);
 };
 
