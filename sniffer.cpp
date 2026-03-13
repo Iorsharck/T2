@@ -56,7 +56,7 @@ void Sniffer::detectSYN(const std::string& srcIP,const std::string& dstIP,int po
     if(t.dstPorts.size() > 10)
     {
         json alert={
-            {"type","alert"},
+            {"type","event"},
             {"event","syn_port_scan"},
             {"source_ip",srcIP}
         };
@@ -69,8 +69,8 @@ void Sniffer::detectSYN(const std::string& srcIP,const std::string& dstIP,int po
     if(t.dstIPs.size() > 10)
     {
         json alert={
-            {"type","alert"},
-            {"event","syn_network_scan"},
+            {"type","anomaly"},
+            {"alert","syn_network_scan"},
             {"source_ip",srcIP}
         };
 
@@ -148,3 +148,4 @@ void Sniffer::startSniffing()
         processPacket(buffer,dataSize);
     }
 }
+
