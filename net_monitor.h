@@ -7,22 +7,19 @@
 class NetMonitor
 {
 private:
-    std::string interfaceName;
+    std::string iface;
     std::string currentIP;
     std::string currentMAC;
 
     int ipChangeCount;
-
     JSONLogger& logger;
 
-    std::string getMAC();
     std::string getIP();
-    bool interfaceExists();
+    std::string getMAC();
 
 public:
-    NetMonitor(const std::string& iface, JSONLogger& log);
-
-    void monitor(unsigned int interval_ms);
+    NetMonitor(const std::string& iface,JSONLogger& log);
+    void monitor(int interval);
 };
 
 #endif
