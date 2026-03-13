@@ -72,7 +72,7 @@ void NetMonitor::monitor(int interval)
         if(newMAC!=currentMAC)
         {
             json alert={
-                {"type","alert"},
+                {"type","event"},
                 {"event","mac_changed"},
                 {"old_mac",currentMAC},
                 {"new_mac",newMAC}
@@ -101,8 +101,8 @@ void NetMonitor::monitor(int interval)
             if(ipChangeCount>10)
             {
                 json alert={
-                    {"type","alert"},
-                    {"event","excessive_ip_changes"}
+                    {"type","anomaly"},
+                    {"alert","excessive_ip_changes"}
                 };
 
                 logger.logJSON(alert.dump());
@@ -112,3 +112,4 @@ void NetMonitor::monitor(int interval)
         }
     }
 }
+
