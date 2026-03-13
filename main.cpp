@@ -4,118 +4,66 @@
 
 #include <iostream>
 #include <thread>
-#include <limits>
 #include <unistd.h>
 
 bool interfaceExists(const std::string& iface)
 {
-    std::string path = "/sys/class/net/" + iface;
-    return access(path.c_str(), F_OK) == 0;
-}
-
-bool isNumber(const std::string& str)
-{
-    for(char c : str)
-    {
-        if(!isdigit(c))
-            return false;
-    }
-    return !str.empty();
+    std::string path="/sys/class/net/"+iface;
+    return access(path.c_str(),F_OK)==0;
 }
 
 int main()
 {
     std::string iface;
-    std::string inputInterval;
-    std::string inputBytes;
+    int interval;
+    int bytes;
 
-    std::cout << "Network Interface: ";
-    std::cin >> iface;
+    std::cout<<"Interface: ";
+    std::cin>>iface;
 
     if(!interfaceExists(iface))
     {
-        std::cerr << "Error: Interface does not exist.\n";
+        std::cerr<<"Interface not found\n";
         return 1;
     }
 
-    std::cout << "Sniffer interval (ms): ";
-    std::cin >> inputInterval;
+    std::cout<<"Net monitor interval (ms): ";
+    std::cin>>interval;
 
-    if(!isNumber(inputInterval))
+    if(interval<=0)
     {
-        std::cerr << "Error: Interval must be a positive number.\n";
+        std::cerr<<"Invalid interval\n";
         return 1;
     }
 
-    int interval = std::stoi(inputInterval);
+    std::cout<<"Bytes to store per packet: ";
+    std::cin>>bytes;
 
-    if(interval <= 0)
+    if(bytes<=0 || bytes>65535)
     {
-        std::cerr << "Error: Interval must be greater than 0.\n";
+        std::cerr<<"Invalid byte value\n";
         return 1;
     }
 
-    std::cout << "Bytes to store from packets: ";
-    std::cin >> inputBytes;
-
-    if(!isNumber(inputBytes))
-    {
-        std::cerr << "Error: Bytes must be numeric.\n";
-        return 1;
-    }
-
-    int bytes = std::stoi(inputBytes);
-
-    if(bytes <= 0 || bytes > 65535)
-    {
-        std::cerr << "Error: Invalid byte size.\n";
-        return 1;
-    }
-
-    if(geteuid() != 0)
-    {
-        std::cerr << "Warning: Program not running as root.\n";
-        std::cerr << "Sniffer may fail due to insufficient permissions.\n";
-    }
+    if(geteuid()!=0)
+        std::cerr<<"Warning: RAW sockets require root\n";
 
     JSONLogger logger("logs.json");
 
     try
     {
-        Sniffer sniffer(iface, bytes, logger);
-        NetMonitor monitor(iface, logger);
+        Sniffer sniffer(iface,bytes,logger);
+        NetMonitor monitor(iface,logger);
 
-        std::thread snifferThread([&sniffer]()
-        {
-            try
-            {
-                sniffer.startSniffing();
-            }
-            catch(...)
-            {
-                std::cerr << "Sniffer thread crashed.\n";
-            }
-        });
+        std::thread t1([&](){sniffer.startSniffing();});
+        std::thread t2([&](){monitor.monitor(interval);});
 
-        std::thread monitorThread([&monitor, interval]()
-        {
-            try
-            {
-                monitor.monitor(interval);
-            }
-            catch(...)
-            {
-                std::cerr << "NetMonitor thread crashed.\n";
-            }
-        });
-
-        snifferThread.join();
-        monitorThread.join();
+        t1.join();
+        t2.join();
     }
     catch(const std::exception& e)
     {
-        std::cerr << "Fatal error: " << e.what() << std::endl;
-        return 1;
+        std::cerr<<"Fatal error: "<<e.what()<<"\n";
     }
 
     return 0;
